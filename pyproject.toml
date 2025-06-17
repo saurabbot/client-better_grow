@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shipra-backend"
+version = "0.1.0"
+description = "WhatsApp Order Processor Backend"
+requires-python = ">=3.11" 
