@@ -22,12 +22,12 @@ async def webhook(request: Request):
             raise HTTPException(status_code=400, detail="No message found in webhook data")
         order_details = await openai_service.extract_order_details(message)
         logger.info(f"Extracted order details: {order_details}")
-        sales_order = await frappe_service.create_sales_order(order_details)
-        logger.info(f"Created sales order: {sales_order}")
+        # sales_order = await frappe_service.create_sales_order(order_details)
+        # logger.info(f"Created sales order: {sales_order}")
         return {
             "status": "success",
             "message": "Order processed successfully",
-            "sales_order": sales_order
+            # "sales_order": sales_order
         }
         
     except Exception as e:

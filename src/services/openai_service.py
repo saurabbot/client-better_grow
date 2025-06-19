@@ -20,17 +20,12 @@ class OpenAIService:
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are an order processing assistant. Extract order details from the given text and return them in the following JSON format:
-                        {
-                            "customer_name": "name of the customer",
-                            "phone_number": "phone number of the customer",
-                            "items": ["list of items being ordered"],
-                            "total_amount": total amount as a float,
-                            "delivery_address": "delivery address if mentioned",
-                            "payment_method": "payment method if mentioned",
-                            "order_notes": "any additional notes"
-                        }
-                        If any field is not mentioned in the text, use null for that field. Only return the JSON object, no other text."""
+                        "content": """Your a sales person at better grow in an FMCG company in dubai your job is to understand the text message might be english, arabi, malayalam and hindi and return the oder details in a json format only in english.Follow these rules while return the json
+                        RULES:
+                        1. only return a json
+                        2. Json should include all data but should make sense for the other agent to process
+                        
+                        """
                     },
                     {
                         "role": "user",
@@ -42,16 +37,18 @@ class OpenAIService:
 
             extracted_data = response.choices[0].message.content.strip()
             data = json.loads(extracted_data)
+            print(data)
+            return data
             
-            return OrderDetails(
-                customer_name=data.get("customer_name", "Unknown Customer"),
-                phone_number=data.get("phone_number", "+1234567890"),
-                items=data.get("items", []),
-                total_amount=data.get("total_amount", 0.0),
-                delivery_address=data.get("delivery_address"),
-                payment_method=data.get("payment_method"),
-                order_notes=data.get("order_notes")
-            )
+            # return OrderDetails(
+            #     customer_name=data.get("customer_name", "Unknown Customer"),
+            #     phone_number=data.get("phone_number", "+1234567890"),
+            #     items=data.get("items", []),
+            #     total_amount=data.get("total_amount", 0.0),
+            #     delivery_address=data.get("delivery_address"),
+            #     payment_method=data.get("payment_method"),
+            #     order_notes=data.get("order_notes")
+            # )
 
         except Exception as e:
             self.logger.error("Error in OpenAI API call", error=str(e))
@@ -81,6 +78,9 @@ class OpenAIService:
                     "role": "system",
                     "content": """You work at an FMCG company and you take care of new orders and many salesmen send you whatsapp images of the things they need your job is to 
                     look at the image and extract the order details and return them in a json format.
+                    RULES:
+                        1. only return a json
+                        2. Json should include all data but should make sense for the other agent to process
                     """
                 },
                 {
