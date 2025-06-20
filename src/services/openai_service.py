@@ -115,3 +115,66 @@ class OpenAIService:
                             error=str(e),
                             image_url=image_url)
             raise OpenAIError("Error in OpenAI API call", details={"error": str(e)})
+    async def transcribe_audio(self, audio_url: str) -> Optional[str]:
+        try:
+            account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+            auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+            
+            if not account_sid or not auth_token:
+                raise OpenAIError("Twilio credentials not found in environment variables")
+            auth = aiohttp.BasicAuth(account_sid, auth_token)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(audio_url, auth=auth) as response:
+                    if response.status != 200:
+                        self.logger.error("Failed to download audio", 
+                                        status=response.status,
+                                        url=audio_url)
+                        raise OpenAIError(f"Failed to download audio: {response.status}")
+                    audio_data = await response.read()
+
+            # Transcribe audio using OpenAI Whisper
+            # Note: Don't specify language parameter for auto-detection
+            transcription = await self.client.audio.transcriptions.create(
+                model="whisper-1",
+                file=("audio.wav", audio_data, "audio/wav")
+                # Removed language="auto" - Whisper will auto-detect language
+            )
+
+            transcribed_text = transcription.text
+            self.logger.info("Audio transcribed successfully", 
+                           audio_url=audio_url, 
+                           transcription_length=len(transcribed_text),
+                           transcription=transcribed_text)
+            
+            return transcribed_text
+
+        except Exception as e:
+            self.logger.error("Error in audio transcription", 
+                            error=str(e),
+                            audio_url=audio_url)
+            raise OpenAIError("Error in audio transcription", details={"error": str(e)})
+
+    async def extract_order_from_audio(self, audio_url: str) -> Optional[OrderDetails]:
+        """Extract order details from audio by first transcribing it."""
+        try:
+            # Step 1: Transcribe the audio
+            transcribed_text = await self.transcribe_audio(audio_url)
+            
+            if not transcribed_text:
+                self.logger.warning("No transcription obtained from audio", audio_url=audio_url)
+                return None
+            
+            self.logger.info("Audio transcribed", 
+                           audio_url=audio_url, 
+                           transcription=transcribed_text)
+            
+            # Step 2: Extract order details from transcribed text
+            order_details = await self.extract_order_details(transcribed_text)
+            
+            return order_details
+
+        except Exception as e:
+            self.logger.error("Error in audio order extraction", 
+                            error=str(e),
+                            audio_url=audio_url)
+            raise OpenAIError("Error in audio order extraction", details={"error": str(e)})

@@ -176,6 +176,7 @@ async def twilio_webhook(
                         message_type=MessageType.TEXT,
                         direction=MessageDirection.OUTBOUND
                     )
+            
                     
             except Exception as e:
                 log.error("failed_to_process_image_order", error=str(e))
@@ -190,17 +191,66 @@ async def twilio_webhook(
                     metadata={"error": str(e)}
                 )
 
-        # elif audio_url:
-            
-        #     try :
-        #         session = container.session_service.add_message(
-        #             phone_number=From,
-        #             content=f"Audio: {audio_url}",
-        #             message_type=MessageType.AUDIO,
-        #             direction=MessageDirection.INBOUND,
-        #             metadata={"audio_url": audio_url, "content_type": MediaContentType0}
-        #         )
-        #     except:
+        elif audio_url:
+            try:
+                # Add inbound audio message to session
+                session = container.session_service.add_message(
+                    phone_number=From,
+                    content=f"Audio: {audio_url}",
+                    message_type=MessageType.AUDIO,
+                    direction=MessageDirection.INBOUND,
+                    metadata={"audio_url": audio_url, "content_type": MediaContentType0}
+                )
+                
+                # Extract order details from audio
+                order_details = await container.openai_service.extract_order_from_audio(audio_url)
+                
+                if order_details:
+                    # Update session with order details
+                    container.session_service.update_session(
+                        session.session_id,
+                        SessionUpdate(order_details=order_details)
+                    )
+                    
+                    confirmation_message = f"🎤 Order from audio: {order_details}"
+                    container.twillio_service.send_message(confirmation_message, to=From)
+                    
+                    # Add outbound message to session
+                    container.session_service.add_message(
+                        phone_number=From,
+                        content=confirmation_message,
+                        message_type=MessageType.TEXT,
+                        direction=MessageDirection.OUTBOUND
+                    )
+                    
+                    log.info("order_processed_from_audio", 
+                            session_id=session.session_id,
+                            order=order_details)
+                else:
+                    no_order_message = "I couldn't detect any order details in the audio. Please send your order as text or try speaking more clearly."
+                    container.twillio_service.send_message(no_order_message, to=From)
+                    
+                    # Add outbound message to session
+                    container.session_service.add_message(
+                        phone_number=From,
+                        content=no_order_message,
+                        message_type=MessageType.TEXT,
+                        direction=MessageDirection.OUTBOUND
+                    )
+                    
+            except Exception as e:
+                log.error("failed_to_process_audio_order", error=str(e))
+                error_message = "⚠️ Sorry, we couldn't process the audio. Please try again with clearer speech or send your order as text."
+                container.twillio_service.send_message(error_message, to=From)
+                
+                # Add error message to session
+                container.session_service.add_message(
+                    phone_number=From,
+                    content=error_message,
+                    message_type=MessageType.TEXT,
+                    direction=MessageDirection.OUTBOUND,
+                    metadata={"error": str(e)}
+                )
         else:
             
             help_message = "Please send your order as text, image or audio."

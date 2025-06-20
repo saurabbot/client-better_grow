@@ -8,10 +8,8 @@ from src.services.session_service import SessionService
 from src.repositories.frappe_repository import FrappeRepository
 
 class Container:
-    """Simple dependency injection container."""
     
     _instance: Optional['Container'] = None
-    
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
