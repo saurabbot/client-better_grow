@@ -10,6 +10,9 @@ from src.models.order import OrderDetails
 from src.core.exceptions import OpenAIError
 import structlog
 from langchain_community.document_loaders import PyPDFLoader
+import pytesseract
+from pdf2image import convert_from_bytes
+from PIL import Image
 
 class OpenAIService:
     def __init__(self, api_key: str):
@@ -181,8 +184,17 @@ class OpenAIService:
                             audio_url=audio_url)
             raise OpenAIError("Error in audio order extraction", details={"error": str(e)})
 
+    async def extract_text_with_ocr(self, pdf_data: bytes) -> str:
+        """Extract text from PDF using OCR (for scanned/image-based PDFs)."""
+        images = convert_from_bytes(pdf_data)
+        extracted_text = ""
+        for img in images:
+            text = pytesseract.image_to_string(img)
+            extracted_text += text + "\n"
+        return extracted_text
+
     async def extract_order_from_pdf(self, pdf_url: str) -> Optional[OrderDetails]:
-        """Extract order details from PDF using LangChain's PyPDFLoader."""
+        """Extract order details from PDF using LangChain's PyPDFLoader and OCR fallback."""
         try:
             account_sid = os.getenv("TWILIO_ACCOUNT_SID")
             auth_token = os.getenv("TWILIO_AUTH_TOKEN")
@@ -225,13 +237,16 @@ class OpenAIService:
                                text_length=len(extracted_text),
                                pages=len(documents))
                 
+                # OCR fallback if no text extracted
                 if not extracted_text.strip():
-                    self.logger.warning("No text extracted from PDF", pdf_url=pdf_url)
-                    return {
-                        "message": "The PDF appears to be empty or contains no extractable text. Please send your order as text or image.",
-                        "pdf_url": pdf_url,
-                        "status": "no_text_extracted"
-                    }
+                    self.logger.warning("No text extracted from PDF, attempting OCR", pdf_url=pdf_url)
+                    extracted_text = await self.extract_text_with_ocr(pdf_data)
+                    if not extracted_text.strip():
+                        return {
+                            "message": "The PDF appears to be empty or contains no extractable text, even with OCR. Please send your order as text or image.",
+                            "pdf_url": pdf_url,
+                            "status": "no_text_extracted"
+                        }
                 
                 # Process the extracted text with the existing order extraction method
                 order_details = await self.extract_order_details(extracted_text)
