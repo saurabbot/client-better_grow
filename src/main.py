@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from src.api.v1.endpoints import webhook, health
-from src.core.logging import setup_logging
+from src.core.logging import setup_logging, logger
 from src.config.settings import get_settings
 
 # Load settings
@@ -10,6 +10,9 @@ settings = get_settings()
 
 # Configure logging
 setup_logging()
+
+# Custom logger test for Railway logs
+logger.info("🚀 Custom logger test: App startup log should appear in Railway logs")
 
 # Create FastAPI app
 app = FastAPI(

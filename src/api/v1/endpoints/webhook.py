@@ -6,6 +6,7 @@ from src.core.exceptions import BaseAppException
 from src.services.openai_service import OpenAIService
 from src.services.frappe_service import FrappeService
 from src.services.twillio_service import TwillioService
+from src.core.logging import logger
 import structlog
 
 router = APIRouter()
@@ -64,6 +65,7 @@ async def twilio_webhook(
     MediaContentType1: str = Form(None),
     container=Depends(get_container)
 ):
+    logger.info("🚀 Custom logger test: twilio_webhook endpoint hit", from_number=From)
     log = container.logger.bind(endpoint="twilio_webhook", sender=From)
     
     try:
