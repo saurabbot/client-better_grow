@@ -2,11 +2,14 @@ import os
 import json
 import base64
 import aiohttp
+import io
+import tempfile
 from typing import Optional
 from openai import AsyncOpenAI
 from src.models.order import OrderDetails
 from src.core.exceptions import OpenAIError
 import structlog
+from langchain_community.document_loaders import PyPDFLoader
 
 class OpenAIService:
     def __init__(self, api_key: str):
@@ -20,10 +23,13 @@ class OpenAIService:
                 messages=[
                     {
                         "role": "system",
-                        "content": """Your a sales person at better grow in an FMCG company in dubai your job is to understand the text message might be english, arabi, malayalam and hindi and return the oder details in a json format only in english.Follow these rules while return the json
+                        "content":  """Your a sales person at better grow in an FMCG company in dubai your job is to understand the text message might be english, arabi, malayalam and hindi and return the oder details in a json format only in english.Follow these rules while return the json
                         RULES:
                         1. only return a json
                         2. Json should include all data but should make sense for the other agent to process
+                        3. dont add other information jus need information fo the items that are ordered 
+                        example:  1: {'order_details': {'customer_name': '', 'items': [{'product_name': 'Amul Low Fat Milk', 'quantity': 25, 'type': 'Carton', 'from': 'GrocerMax'}, {'product_name': 'Maggi Two Minute Noodles', 'quantity': 50, 'type': 'Unit', 'from': 'GrocerMax'}], 'pricing': 'Usual prices'}}
+                        2:  {'Product_1': {'Name': 'Amul Toned Milk', 'Quantity': '25 cartons'}, 'Product_2': {'Name': 'Maggi 2-Minute Noodles', 'Quantity': '50 units'}, 'Supplier': 'GrocerMax', 'Order_Instruction': 'Please order at standard rates.'}
                         
                         """
                     },
@@ -36,20 +42,7 @@ class OpenAIService:
             )
 
             extracted_data = response.choices[0].message.content.strip()
-            data = json.loads(extracted_data)
-            print(data)
-            return data
-            
-            # return OrderDetails(
-            #     customer_name=data.get("customer_name", "Unknown Customer"),
-            #     phone_number=data.get("phone_number", "+1234567890"),
-            #     items=data.get("items", []),
-            #     total_amount=data.get("total_amount", 0.0),
-            #     delivery_address=data.get("delivery_address"),
-            #     payment_method=data.get("payment_method"),
-            #     order_notes=data.get("order_notes")
-            # )
-
+            return extracted_data
         except Exception as e:
             self.logger.error("Error in OpenAI API call", error=str(e))
             raise OpenAIError("Error in OpenAI API call", details={"error": str(e)})
@@ -178,3 +171,87 @@ class OpenAIService:
                             error=str(e),
                             audio_url=audio_url)
             raise OpenAIError("Error in audio order extraction", details={"error": str(e)})
+
+    async def extract_order_from_pdf(self, pdf_url: str) -> Optional[OrderDetails]:
+        """Extract order details from PDF using LangChain's PyPDFLoader."""
+        try:
+            account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+            auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+            
+            if not account_sid or not auth_token:
+                raise OpenAIError("Twilio credentials not found in environment variables")
+
+            auth = aiohttp.BasicAuth(account_sid, auth_token)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(pdf_url, auth=auth) as response:
+                    if response.status != 200:
+                        self.logger.error("Failed to download PDF", 
+                                        status=response.status,
+                                        url=pdf_url)
+                        raise OpenAIError(f"Failed to download PDF: {response.status}")
+                    pdf_data = await response.read()
+
+            # Use LangChain's PyPDFLoader for better text extraction
+            try:
+                # Create a temporary file to save the PDF
+                with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+                    temp_file.write(pdf_data)
+                    temp_file_path = temp_file.name
+                
+                # Use LangChain's PyPDFLoader
+                loader = PyPDFLoader(temp_file_path)
+                documents = loader.load()
+                
+                # Extract text from all pages
+                extracted_text = ""
+                for doc in documents:
+                    if doc.page_content:
+                        extracted_text += doc.page_content + "\n"
+                
+                # Clean up temporary file
+                os.unlink(temp_file_path)
+                
+                self.logger.info("PDF text extracted successfully using LangChain", 
+                               pdf_url=pdf_url,
+                               text_length=len(extracted_text),
+                               pages=len(documents))
+                
+                if not extracted_text.strip():
+                    self.logger.warning("No text extracted from PDF", pdf_url=pdf_url)
+                    return {
+                        "message": "The PDF appears to be empty or contains no extractable text. Please send your order as text or image.",
+                        "pdf_url": pdf_url,
+                        "status": "no_text_extracted"
+                    }
+                
+                # Process the extracted text with the existing order extraction method
+                order_details = await self.extract_order_details(extracted_text)
+                
+                if order_details:
+                    self.logger.info("Order details extracted from PDF text", 
+                                   pdf_url=pdf_url,
+                                   order_details=order_details)
+                    return order_details
+                else:
+                    return {
+                        "message": "I couldn't detect any order details in the PDF content. Please ensure the PDF contains clear order information or send your order as text.",
+                        "pdf_url": pdf_url,
+                        "extracted_text": extracted_text[:200] + "..." if len(extracted_text) > 200 else extracted_text,
+                        "status": "no_order_found"
+                    }
+                    
+            except Exception as pdf_error:
+                self.logger.error("Error extracting text from PDF using LangChain", 
+                                error=str(pdf_error),
+                                pdf_url=pdf_url)
+                return {
+                    "message": "Sorry, I couldn't read the PDF file. It might be corrupted, password-protected, or in an unsupported format. Please send your order as text or image.",
+                    "pdf_url": pdf_url,
+                    "status": "pdf_extraction_failed"
+                }
+
+        except Exception as e:
+            self.logger.error("Error in PDF order extraction", 
+                            error=str(e),
+                            pdf_url=pdf_url)
+            raise OpenAIError("Error in PDF order extraction", details={"error": str(e)})

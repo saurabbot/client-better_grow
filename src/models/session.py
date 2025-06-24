@@ -7,6 +7,7 @@ class MessageType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
     AUDIO = "audio"
+    PDF = "pdf"
     SYSTEM = "system"
 
 class MessageDirection(str, Enum):

@@ -11,3 +11,5 @@ structlog==23.2.0
 tenacity==8.2.3
 pydantic-settings==2.1.0 
 twilio==9.0.1
+PyPDF2==3.0.1
+langchain-community==0.0.27

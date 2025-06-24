@@ -70,12 +70,15 @@ async def twilio_webhook(
         text_message = Body.strip() if Body else None
         image_url = None
         audio_url = None
+        pdf_url = None
 
         if NumMedia > 0 and MediaContentType0:
             if MediaContentType0.startswith("image/"):
                 image_url = MediaUrl0
             elif MediaContentType0.startswith("audio/"):
                 audio_url = MediaUrl0
+            elif MediaContentType0 == "application/pdf":
+                pdf_url = MediaUrl0
 
         # TEXT HANDLING
         if text_message:
@@ -90,13 +93,15 @@ async def twilio_webhook(
                 
                 # Extract order details
                 order_json = await container.openai_service.extract_order_details(text_message)
+                print(order_json, 'BEeep')
+                
                 
                 # Update session with order details
-                if order_json:
-                    container.session_service.update_session(
-                        session.session_id,
-                        SessionUpdate(order_details=order_json)
-                    )
+                # if order_json:
+                #     container.session_service.update_session(
+                #         session.session_id,
+                #         SessionUpdate(order_details=order_json)
+                #     )
                 
                 # Prepare confirmation message
                 confirmation_message = f"✅ Order received: {order_json}"
@@ -104,17 +109,17 @@ async def twilio_webhook(
                 # Send response
                 container.twillio_service.send_message(confirmation_message, to=From)
                 
-                # Add outbound message to session
-                container.session_service.add_message(
-                    phone_number=From,
-                    content=confirmation_message,
-                    message_type=MessageType.TEXT,
-                    direction=MessageDirection.OUTBOUND
-                )
+                # # Add outbound message to session
+                # container.session_service.add_message(
+                #     phone_number=From,
+                #     content=confirmation_message,
+                #     message_type=MessageType.TEXT,
+                #     direction=MessageDirection.OUTBOUND
+                # )
                 
-                log.info("order_processed_from_text", 
-                        session_id=session.session_id,
-                        order=order_json)
+                # log.info("order_processed_from_text", 
+                #         session_id=session.session_id,
+                #         order=order_json)
                         
             except Exception as e:
                 log.error("failed_to_process_text_order", error=str(e))
@@ -251,9 +256,91 @@ async def twilio_webhook(
                     direction=MessageDirection.OUTBOUND,
                     metadata={"error": str(e)}
                 )
+
+        # PDF HANDLING
+        elif pdf_url:
+            try:
+                # Add inbound PDF message to session
+                session = container.session_service.add_message(
+                    phone_number=From,
+                    content=f"PDF: {pdf_url}",
+                    message_type=MessageType.PDF,
+                    direction=MessageDirection.INBOUND,
+                    metadata={"pdf_url": pdf_url, "content_type": MediaContentType0}
+                )
+                
+                # Extract order details from PDF
+                order_details = await container.openai_service.extract_order_from_pdf(pdf_url)
+                confirmation_message = f"📄 Order from PDF: {order_details}"
+                container.twillio_service.send_message(confirmation_message, to=From)
+                
+                # if order_details and isinstance(order_details, dict) and order_details.get("status"):
+                #     # PDF was processed but had issues (no text, no order found, etc.)
+                #     no_order_message = order_details.get("message", "I couldn't detect any order details in the PDF. Please send your order as text or ensure the PDF contains clear order information.")
+                #     container.twillio_service.send_message(no_order_message, to=From)
+                    
+                #     # Add outbound message to session
+                #     container.session_service.add_message(
+                #         phone_number=From,
+                #         content=no_order_message,
+                #         message_type=MessageType.TEXT,
+                #         direction=MessageDirection.OUTBOUND
+                #     )
+                    
+                #     log.info("pdf_processed_with_issues", 
+                #             session_id=session.session_id,
+                #             status=order_details.get("status"))
+                # elif order_details:
+                #     # Successfully extracted order details
+                #     # Update session with order details
+                #     container.session_service.update_session(
+                #         session.session_id,
+                #         SessionUpdate(order_details=order_details)
+                #     )
+                    
+                #     confirmation_message = f"📄 Order from PDF: {order_details}"
+                #     container.twillio_service.send_message(confirmation_message, to=From)
+                    
+                #     # Add outbound message to session
+                #     container.session_service.add_message(
+                #         phone_number=From,
+                #         content=confirmation_message,
+                #         message_type=MessageType.TEXT,
+                #         direction=MessageDirection.OUTBOUND
+                #     )
+                    
+                #     log.info("order_processed_from_pdf", 
+                #             session_id=session.session_id,
+                #             order=order_details)
+                # else:
+                #     # No order details found
+                #     no_order_message = "I couldn't detect any order details in the PDF. Please send your order as text or ensure the PDF contains clear order information."
+                #     container.twillio_service.send_message(no_order_message, to=From)
+                    
+                #     # Add outbound message to session
+                #     container.session_service.add_message(
+                #         phone_number=From,
+                #         content=no_order_message,
+                #         message_type=MessageType.TEXT,
+                #         direction=MessageDirection.OUTBOUND
+                #     )
+                    
+            except Exception as e:
+                log.error("failed_to_process_pdf_order", error=str(e))
+                error_message = "⚠️ Sorry, we couldn't process the PDF. Please try again with a different file or send your order as text."
+                container.twillio_service.send_message(error_message, to=From)
+                
+                # Add error message to session
+                container.session_service.add_message(
+                    phone_number=From,
+                    content=error_message,
+                    message_type=MessageType.TEXT,
+                    direction=MessageDirection.OUTBOUND,
+                    metadata={"error": str(e)}
+                )
         else:
             
-            help_message = "Please send your order as text, image or audio."
+            help_message = "Please send your order as text, image, audio, or PDF."
             container.twillio_service.send_message(help_message, to=From)
             
             # Add help message to session
