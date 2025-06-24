@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from src.api.v1.endpoints import webhook
+from src.api.v1.endpoints import webhook, health
 from src.core.logging import setup_logging
 from src.config.settings import get_settings
 
@@ -32,6 +32,11 @@ app.include_router(
     webhook.router,
     prefix="/api/v1",
     tags=["webhook"]
+)
+
+app.include_router(
+    health.router,
+    tags=["health"]
 )
 
 if __name__ == "__main__":
