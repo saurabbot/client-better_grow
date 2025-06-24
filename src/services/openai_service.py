@@ -23,13 +23,16 @@ class OpenAIService:
                 messages=[
                     {
                         "role": "system",
-                        "content":  """Your a sales person at better grow in an FMCG company in dubai your job is to understand the text message might be english, arabi, malayalam and hindi and return the oder details in a json format only in english.Follow these rules while return the json
-                        RULES:
-                        1. only return a json
-                        2. Json should include all data but should make sense for the other agent to process
-                        3. dont add other information jus need information fo the items that are ordered 
-                        example:  1: {'order_details': {'customer_name': '', 'items': [{'product_name': 'Amul Low Fat Milk', 'quantity': 25, 'type': 'Carton', 'from': 'GrocerMax'}, {'product_name': 'Maggi Two Minute Noodles', 'quantity': 50, 'type': 'Unit', 'from': 'GrocerMax'}], 'pricing': 'Usual prices'}}
-                        2:  {'Product_1': {'Name': 'Amul Toned Milk', 'Quantity': '25 cartons'}, 'Product_2': {'Name': 'Maggi 2-Minute Noodles', 'Quantity': '50 units'}, 'Supplier': 'GrocerMax', 'Order_Instruction': 'Please order at standard rates.'}
+                        "content":  """Your a sales person at better grow in an FMCG company in dubai your job is to understand the text message might be english, arabi, malayalam and hindi and return the oder details in a string format only in english.Follow these rules while return the string
+                        rules:
+                        1. only return a string
+                        2. string should include all data but should make sense for the other agent to process
+                        3. each item should be in a new line
+                        example:
+                        Amul Toned Milk 25 cartons
+                        Maggi 2-Minute Noodles 50 units
+                        GrocerMax
+                        Please order at standard rates.
                         
                         """
                     },
@@ -70,10 +73,16 @@ class OpenAIService:
                 {
                     "role": "system",
                     "content": """You work at an FMCG company and you take care of new orders and many salesmen send you whatsapp images of the things they need your job is to 
-                    look at the image and extract the order details and return them in a json format.
-                    RULES:
-                        1. only return a json
-                        2. Json should include all data but should make sense for the other agent to process
+                    look at the image and extract the order details and return them in a string format only in english.
+                    rules:
+                    1. only return a string
+                    2. string should include all data but should make sense for the other agent to process
+                    3. each item should be in a new line
+                    example:
+                    Amul Toned Milk 25 cartons
+                    Maggi 2-Minute Noodles 50 units
+                    GrocerMax
+                    Please order at standard rates.
                     """
                 },
                 {
