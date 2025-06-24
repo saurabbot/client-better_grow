@@ -66,7 +66,11 @@ async def twilio_webhook(
     MediaContentType1: str = Form(None),
     container=Depends(get_container)
 ):
-    logger.info("🚀 Custom logger test: twilio_webhook endpoint hit", from_number=From)
+    try:
+        from src.core.logging import logger
+        logger.info("🚀 Custom logger test: twilio_webhook endpoint entered", from_number=From)
+    except Exception as e:
+        print("Logger failed:", e)
     try:
         text_message = Body.strip() if Body else None
         image_url = None
