@@ -288,9 +288,13 @@ Process any order message following this exact format with no additional comment
                     temp_file.write(pdf_data)
                     temp_file_path = temp_file.name
                 
+                logger.info("Temporary PDF file created", temp_file_path=temp_file_path, file_size=len(pdf_data))
+                
                 # Use LangChain's PyPDFLoader
                 loader = PyPDFLoader(temp_file_path)
+                logger.info("PyPDFLoader initialized, loading documents")
                 documents = loader.load()
+                logger.info("Documents loaded from PDF", document_count=len(documents))
                 
                 # Extract text from all pages
                 extracted_text = ""
@@ -300,6 +304,7 @@ Process any order message following this exact format with no additional comment
                 
                 # Clean up temporary file
                 os.unlink(temp_file_path)
+                logger.info("Temporary file cleaned up")
                 
                 logger.info("LangChain extraction done", text_length=len(extracted_text), pages=len(documents))
                 
@@ -337,11 +342,14 @@ Process any order message following this exact format with no additional comment
             except Exception as pdf_error:
                 logger.error("Error extracting text from PDF using LangChain", 
                                 error=str(pdf_error),
-                                pdf_url=pdf_url)
+                                error_type=type(pdf_error).__name__,
+                                pdf_url=pdf_url,
+                                pdf_size=len(pdf_data))
                 return {
                     "message": "Sorry, I couldn't read the PDF file. It might be corrupted, password-protected, or in an unsupported format. Please send your order as text or image.",
                     "pdf_url": pdf_url,
-                    "status": "pdf_extraction_failed"
+                    "status": "pdf_extraction_failed",
+                    "error_details": str(pdf_error)
                 }
 
         except Exception as e:
