@@ -57,16 +57,4 @@ USER appuser
 EXPOSE 8000
 
 # Default command (Railway will override PORT)
-CMD ["./railway-start.sh"]
-
-# Stage 5: Production with Gunicorn (alternative)
-FROM production as production-gunicorn
-
-# Install Gunicorn
-RUN pip install --no-cache-dir gunicorn
-
-# Copy Gunicorn configuration
-COPY gunicorn.conf.py .
-
-# Override command for Gunicorn
-CMD ["gunicorn", "src.main:app", "-c", "gunicorn.conf.py"] 
+CMD ["./railway-start.sh"] 
