@@ -66,9 +66,7 @@ async def twilio_webhook(
     MediaContentType1: str = Form(None),
     container=Depends(get_container)
 ):
-    logger.info("🚀 Custom logger test: twilio_webhook endpoint entered")
-    log = container.logger.bind(endpoint="twilio_webhook", sender=From)
-    
+    logger.info("🚀 Custom logger test: twilio_webhook endpoint hit", from_number=From)
     try:
         text_message = Body.strip() if Body else None
         image_url = None
@@ -86,50 +84,23 @@ async def twilio_webhook(
         # TEXT HANDLING
         if text_message:
             try:
-                # Add inbound message to session
+                logger.info("Processing text message", from_number=From, text=text_message)
                 session = container.session_service.add_message(
                     phone_number=From,
                     content=text_message,
                     message_type=MessageType.TEXT,
                     direction=MessageDirection.INBOUND
                 )
-                
-                # Extract order details
+                all_previous_messages = container.session_service.get_conversation_history(From)
+                logger.info("Fetched previous messages", count=len(all_previous_messages))
                 order_json = await container.openai_service.extract_order_details(text_message)
-                print(order_json, 'BEeep')
-                
-                
-                # Update session with order details
-                # if order_json:
-                #     container.session_service.update_session(
-                #         session.session_id,
-                #         SessionUpdate(order_details=order_json)
-                #     )
-                
-                # Prepare confirmation message
+                logger.info("Order details extracted from text", order_json=order_json)
                 confirmation_message = f"✅ Order received:\n{order_json}"
-                
-                # Send response
                 container.twillio_service.send_message(confirmation_message, to=From)
-                
-                # # Add outbound message to session
-                # container.session_service.add_message(
-                #     phone_number=From,
-                #     content=confirmation_message,
-                #     message_type=MessageType.TEXT,
-                #     direction=MessageDirection.OUTBOUND
-                # )
-                
-                # log.info("order_processed_from_text", 
-                #         session_id=session.session_id,
-                #         order=order_json)
-                        
             except Exception as e:
-                log.error("failed_to_process_text_order", error=str(e))
+                logger.error("failed_to_process_text_order", error=str(e))
                 error_message = "⚠️ There was an error processing your order. Please try again later."
                 container.twillio_service.send_message(error_message, to=From)
-                
-                # Add error message to session
                 container.session_service.add_message(
                     phone_number=From,
                     content=error_message,
@@ -142,7 +113,7 @@ async def twilio_webhook(
         # IMAGE HANDLING
         elif image_url:
             try:
-                # Add inbound image message to session
+                logger.info("Processing image message", from_number=From, image_url=image_url)
                 session = container.session_service.add_message(
                     phone_number=From,
                     content=f"Image: {image_url}",
@@ -150,47 +121,25 @@ async def twilio_webhook(
                     direction=MessageDirection.INBOUND,
                     metadata={"image_url": image_url, "content_type": MediaContentType0}
                 )
-                
                 order_details = await container.openai_service.extract_order_from_image(image_url)
                 if order_details:
-                    # Update session with order details
-                    # container.session_service.update_session(
-                    #     session.session_id,
-                    #     SessionUpdate(order_details=order_details)
-                    # )
-                    
+                    logger.info("Order details extracted from image", order_details=order_details)
                     confirmation_message = f"✅ Order received: {order_details}"
                     container.twillio_service.send_message(confirmation_message, to=From)
-                    
-                    # Add outbound message to session
-                    # container.session_service.add_message(
-                    #     phone_number=From,
-                    #     content=confirmation_message,
-                    #     message_type=MessageType.TEXT,
-                    #     direction=MessageDirection.OUTBOUND
-                    # )
-                    
-                    log.info("order_processed_from_image", 
-                            session_id=session.session_id,
-                            order=order_details)
                 else:
+                    logger.warning("No order details found in image", image_url=image_url)
                     no_order_message = "I couldn't detect any order details in the image. Please send your order as text."
                     container.twillio_service.send_message(no_order_message, to=From)
-                    
-                    # Add outbound message to session
                     container.session_service.add_message(
                         phone_number=From,
                         content=no_order_message,
                         message_type=MessageType.TEXT,
                         direction=MessageDirection.OUTBOUND
                     )
-            
-                    
             except Exception as e:
-                log.error("failed_to_process_image_order", error=str(e))
+                logger.error("failed_to_process_image_order", error=str(e))
                 error_message = "⚠️ Sorry, we couldn't process the image. Please try again with a clearer photo or send it as text."
                 container.twillio_service.send_message(error_message, to=From)
-                
                 container.session_service.add_message(
                     phone_number=From,
                     content=error_message,
@@ -201,57 +150,43 @@ async def twilio_webhook(
 
         elif audio_url:
             try:
-                # Add inbound audio message to session
-                # session = container.session_service.add_message(
-                #     phone_number=From,
-                #     content=f"Audio: {audio_url}",
-                #     message_type=MessageType.AUDIO,
-                #     direction=MessageDirection.INBOUND,
-                #     metadata={"audio_url": audio_url, "content_type": MediaContentType0}
-                # )
-                
-                # Extract order details from audio
+                logger.info("Processing audio message", from_number=From, audio_url=audio_url)
+                session = container.session_service.add_message(
+                    phone_number=From,
+                    content=f"Audio: {audio_url}",
+                    message_type=MessageType.AUDIO,
+                    direction=MessageDirection.INBOUND,
+                    metadata={"audio_url": audio_url, "content_type": MediaContentType0}
+                )
                 order_details = await container.openai_service.extract_order_from_audio(audio_url)
-                
                 if order_details:
-                    # Update session with order details
-                    # container.session_service.update_session(
-                    #     session.session_id,
-                    #     SessionUpdate(order_details=order_details)
-                    # )
-                    
+                    logger.info("Order details extracted from audio", order_details=order_details)
+                    container.session_service.update_session(
+                        session.session_id,
+                        SessionUpdate(order_details=order_details)
+                    )
                     confirmation_message = f"✅ Order received: {order_details}"
                     container.twillio_service.send_message(confirmation_message, to=From)
-                    
-                    # # Add outbound message to session
-                    # container.session_service.add_message(
-                    #     phone_number=From,
-                    #     content=confirmation_message,
-                    #     message_type=MessageType.TEXT,
-                    #     direction=MessageDirection.OUTBOUND
-                    # )
-                    
-                    # log.info("order_processed_from_audio", 
-                    #         session_id=session.session_id,
-                    #         order=order_details)
+                    container.session_service.add_message(
+                        phone_number=From,
+                        content=confirmation_message,
+                        message_type=MessageType.TEXT,
+                        direction=MessageDirection.OUTBOUND
+                    )
                 else:
+                    logger.warning("No order details found in audio", audio_url=audio_url)
                     no_order_message = "I couldn't detect any order details in the audio. Please send your order as text or try speaking more clearly."
                     container.twillio_service.send_message(no_order_message, to=From)
-                    
-                    # Add outbound message to session
                     container.session_service.add_message(
                         phone_number=From,
                         content=no_order_message,
                         message_type=MessageType.TEXT,
                         direction=MessageDirection.OUTBOUND
                     )
-                    
             except Exception as e:
-                log.error("failed_to_process_audio_order", error=str(e))
+                logger.error("failed_to_process_audio_order", error=str(e))
                 error_message = "⚠️ Sorry, we couldn't process the audio. Please try again with clearer speech or send your order as text."
                 container.twillio_service.send_message(error_message, to=From)
-                
-                # Add error message to session
                 container.session_service.add_message(
                     phone_number=From,
                     content=error_message,
@@ -263,7 +198,7 @@ async def twilio_webhook(
         # PDF HANDLING
         elif pdf_url:
             try:
-                # Add inbound PDF message to session
+                logger.info("Processing PDF message", from_number=From, pdf_url=pdf_url)
                 session = container.session_service.add_message(
                     phone_number=From,
                     content=f"PDF: {pdf_url}",
@@ -271,69 +206,14 @@ async def twilio_webhook(
                     direction=MessageDirection.INBOUND,
                     metadata={"pdf_url": pdf_url, "content_type": MediaContentType0}
                 )
-                
-                # Extract order details from PDF
                 order_details = await container.openai_service.extract_order_from_pdf(pdf_url)
+                logger.info("Order details extracted from PDF", order_details=order_details)
                 confirmation_message = f"✅ Order received: {order_details}"
                 container.twillio_service.send_message(confirmation_message, to=From)
-                
-                # if order_details and isinstance(order_details, dict) and order_details.get("status"):
-                #     # PDF was processed but had issues (no text, no order found, etc.)
-                #     no_order_message = order_details.get("message", "I couldn't detect any order details in the PDF. Please send your order as text or ensure the PDF contains clear order information.")
-                #     container.twillio_service.send_message(no_order_message, to=From)
-                    
-                #     # Add outbound message to session
-                #     container.session_service.add_message(
-                #         phone_number=From,
-                #         content=no_order_message,
-                #         message_type=MessageType.TEXT,
-                #         direction=MessageDirection.OUTBOUND
-                #     )
-                    
-                #     log.info("pdf_processed_with_issues", 
-                #             session_id=session.session_id,
-                #             status=order_details.get("status"))
-                # elif order_details:
-                #     # Successfully extracted order details
-                #     # Update session with order details
-                #     container.session_service.update_session(
-                #         session.session_id,
-                #         SessionUpdate(order_details=order_details)
-                #     )
-                    
-                #     confirmation_message = f"📄 Order from PDF: {order_details}"
-                #     container.twillio_service.send_message(confirmation_message, to=From)
-                    
-                #     # Add outbound message to session
-                #     container.session_service.add_message(
-                #         phone_number=From,
-                #         content=confirmation_message,
-                #         message_type=MessageType.TEXT,
-                #         direction=MessageDirection.OUTBOUND
-                #     )
-                    
-                #     log.info("order_processed_from_pdf", 
-                #             session_id=session.session_id,
-                #             order=order_details)
-                # else:
-                #     # No order details found
-                #     no_order_message = "I couldn't detect any order details in the PDF. Please send your order as text or ensure the PDF contains clear order information."
-                #     container.twillio_service.send_message(no_order_message, to=From)
-                    
-                #     # Add outbound message to session
-                #     container.session_service.add_message(
-                #         phone_number=From,
-                #         content=no_order_message,
-                #         message_type=MessageType.TEXT,
-                #         direction=MessageDirection.OUTBOUND
-                #     )
-                    
             except Exception as e:
-                log.error("failed_to_process_pdf_order", error=str(e))
+                logger.error("failed_to_process_pdf_order", error=str(e))
                 error_message = "⚠️ Sorry, we couldn't process the PDF. Please try again with a different file or send your order as text."
                 container.twillio_service.send_message(error_message, to=From)
-                
-                # Add error message to session
                 container.session_service.add_message(
                     phone_number=From,
                     content=error_message,
@@ -342,27 +222,22 @@ async def twilio_webhook(
                     metadata={"error": str(e)}
                 )
         else:
-            
             help_message = "Please send your order as text, image, audio, or PDF."
+            logger.warning("empty_or_unsupported_input", from_number=From)
             container.twillio_service.send_message(help_message, to=From)
-            
-            # Add help message to session
             container.session_service.add_message(
                 phone_number=From,
                 content=help_message,
                 message_type=MessageType.TEXT,
                 direction=MessageDirection.OUTBOUND
             )
-            log.warning("empty_or_unsupported_input")
 
         return {"success": True}
 
     except Exception as err:
-        log.error("unexpected_error", error=str(err), exec_info=True)
+        logger.error("unexpected_error", error=str(err))
         error_message = "❌ Internal error. Please try again later or contact support."
         container.twillio_service.send_message(error_message, to=From)
-        
-        # Add error message to session
         container.session_service.add_message(
             phone_number=From,
             content=error_message,
