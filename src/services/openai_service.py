@@ -13,6 +13,7 @@ from langchain_community.document_loaders import PyPDFLoader
 import pytesseract
 from pdf2image import convert_from_bytes
 from PIL import Image
+import shutil
 
 class OpenAIService:
     def __init__(self, api_key: str):
@@ -249,6 +250,14 @@ Process any order message following this exact format with no additional comment
 
     async def extract_order_from_pdf(self, pdf_url: str) -> Optional[OrderDetails]:
         self.logger.info("Starting PDF extraction", pdf_url=pdf_url)
+        # Check for pdftoppm binary required by pdf2image
+        if not shutil.which("pdftoppm"):
+            self.logger.error("pdftoppm (poppler-utils) not found in PATH. PDF to image conversion will fail.")
+            return {
+                "message": "PDF processing is not available because pdftoppm (poppler-utils) is missing on the server. Please contact support.",
+                "pdf_url": pdf_url,
+                "status": "pdf_extraction_failed"
+            }
         try:
             account_sid = os.getenv("TWILIO_ACCOUNT_SID")
             auth_token = os.getenv("TWILIO_AUTH_TOKEN")
