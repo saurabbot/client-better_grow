@@ -104,7 +104,7 @@ async def twilio_webhook(
                 #     )
                 
                 # Prepare confirmation message
-                confirmation_message = f"✅ Order received: {order_json}"
+                confirmation_message = f"✅ Order received:\n{order_json}"
                 
                 # Send response
                 container.twillio_service.send_message(confirmation_message, to=From)
@@ -156,7 +156,7 @@ async def twilio_webhook(
                     #     SessionUpdate(order_details=order_details)
                     # )
                     
-                    confirmation_message = f"📸 Order from image: {order_details}"
+                    confirmation_message = f"✅ Order received: {order_details}"
                     container.twillio_service.send_message(confirmation_message, to=From)
                     
                     # Add outbound message to session
@@ -199,38 +199,38 @@ async def twilio_webhook(
         elif audio_url:
             try:
                 # Add inbound audio message to session
-                session = container.session_service.add_message(
-                    phone_number=From,
-                    content=f"Audio: {audio_url}",
-                    message_type=MessageType.AUDIO,
-                    direction=MessageDirection.INBOUND,
-                    metadata={"audio_url": audio_url, "content_type": MediaContentType0}
-                )
+                # session = container.session_service.add_message(
+                #     phone_number=From,
+                #     content=f"Audio: {audio_url}",
+                #     message_type=MessageType.AUDIO,
+                #     direction=MessageDirection.INBOUND,
+                #     metadata={"audio_url": audio_url, "content_type": MediaContentType0}
+                # )
                 
                 # Extract order details from audio
                 order_details = await container.openai_service.extract_order_from_audio(audio_url)
                 
                 if order_details:
                     # Update session with order details
-                    container.session_service.update_session(
-                        session.session_id,
-                        SessionUpdate(order_details=order_details)
-                    )
+                    # container.session_service.update_session(
+                    #     session.session_id,
+                    #     SessionUpdate(order_details=order_details)
+                    # )
                     
-                    confirmation_message = f"🎤 Order from audio: {order_details}"
+                    confirmation_message = f"✅ Order received: {order_details}"
                     container.twillio_service.send_message(confirmation_message, to=From)
                     
-                    # Add outbound message to session
-                    container.session_service.add_message(
-                        phone_number=From,
-                        content=confirmation_message,
-                        message_type=MessageType.TEXT,
-                        direction=MessageDirection.OUTBOUND
-                    )
+                    # # Add outbound message to session
+                    # container.session_service.add_message(
+                    #     phone_number=From,
+                    #     content=confirmation_message,
+                    #     message_type=MessageType.TEXT,
+                    #     direction=MessageDirection.OUTBOUND
+                    # )
                     
-                    log.info("order_processed_from_audio", 
-                            session_id=session.session_id,
-                            order=order_details)
+                    # log.info("order_processed_from_audio", 
+                    #         session_id=session.session_id,
+                    #         order=order_details)
                 else:
                     no_order_message = "I couldn't detect any order details in the audio. Please send your order as text or try speaking more clearly."
                     container.twillio_service.send_message(no_order_message, to=From)
@@ -271,7 +271,7 @@ async def twilio_webhook(
                 
                 # Extract order details from PDF
                 order_details = await container.openai_service.extract_order_from_pdf(pdf_url)
-                confirmation_message = f"📄 Order from PDF: {order_details}"
+                confirmation_message = f"✅ Order received: {order_details}"
                 container.twillio_service.send_message(confirmation_message, to=From)
                 
                 # if order_details and isinstance(order_details, dict) and order_details.get("status"):
