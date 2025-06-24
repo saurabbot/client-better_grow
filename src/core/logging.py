@@ -1,7 +1,21 @@
 import logging
+from loguru import logger
 import sys
 import structlog
 from typing import Any, Dict
+
+# Remove all existing loguru handlers
+logger.remove()
+# Add stdout handler for Railway and local console
+logger.add(sys.stdout, level="INFO")
+
+# Configure structlog to output to stdout as well
+structlog.configure(
+    processors=[
+        structlog.processors.JSONRenderer()
+    ],
+    logger_factory=structlog.PrintLoggerFactory(file=sys.stdout)
+)
 
 def setup_logging() -> None:
     """Configure structured logging for the application."""
