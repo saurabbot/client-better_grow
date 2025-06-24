@@ -8,6 +8,7 @@ from typing import Optional
 from openai import AsyncOpenAI
 from src.models.order import OrderDetails
 from src.core.exceptions import OpenAIError
+from src.core.logging import logger
 import structlog
 from langchain_community.document_loaders import PyPDFLoader
 import pytesseract
@@ -22,6 +23,7 @@ class OpenAIService:
 
     async def extract_order_details(self, text: str) -> Optional[OrderDetails]:
         try:
+            logger.info("Starting order extraction from text", text_length=len(text))
             response = await self.client.chat.completions.create(
                 model="gpt-4",
                 messages=[
@@ -73,9 +75,10 @@ Process any order message following this exact format with no additional comment
             )
 
             extracted_data = response.choices[0].message.content.strip()
+            logger.info("Order extraction completed successfully", extracted_data=extracted_data)
             return extracted_data
         except Exception as e:
-            self.logger.error("Error in OpenAI API call", error=str(e))
+            logger.error("Error in OpenAI API call", error=str(e), error_type=type(e).__name__)
             raise OpenAIError("Error in OpenAI API call", details={"error": str(e)})
 
     async def extract_order_from_image(self, image_url: str) -> Optional[OrderDetails]:
@@ -90,7 +93,7 @@ Process any order message following this exact format with no additional comment
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url, auth=auth) as response:
                     if response.status != 200:
-                        self.logger.error("Failed to download image", 
+                        logger.error("Failed to download image", 
                                         status=response.status,
                                         url=image_url)
                         raise OpenAIError(f"Failed to download image: {response.status}")
@@ -165,7 +168,7 @@ Process any order message following this exact format with no additional comment
             return extracted_data
 
         except Exception as e:
-            self.logger.error("Error in OpenAI API call", 
+            logger.error("Error in OpenAI API call", 
                             error=str(e),
                             image_url=image_url)
             raise OpenAIError("Error in OpenAI API call", details={"error": str(e)})
@@ -180,7 +183,7 @@ Process any order message following this exact format with no additional comment
             async with aiohttp.ClientSession() as session:
                 async with session.get(audio_url, auth=auth) as response:
                     if response.status != 200:
-                        self.logger.error("Failed to download audio", 
+                        logger.error("Failed to download audio", 
                                         status=response.status,
                                         url=audio_url)
                         raise OpenAIError(f"Failed to download audio: {response.status}")
@@ -195,7 +198,7 @@ Process any order message following this exact format with no additional comment
             )
 
             transcribed_text = transcription.text
-            self.logger.info("Audio transcribed successfully", 
+            logger.info("Audio transcribed successfully", 
                            audio_url=audio_url, 
                            transcription_length=len(transcribed_text),
                            transcription=transcribed_text)
@@ -203,7 +206,7 @@ Process any order message following this exact format with no additional comment
             return transcribed_text
 
         except Exception as e:
-            self.logger.error("Error in audio transcription", 
+            logger.error("Error in audio transcription", 
                             error=str(e),
                             audio_url=audio_url)
             raise OpenAIError("Error in audio transcription", details={"error": str(e)})
@@ -215,10 +218,10 @@ Process any order message following this exact format with no additional comment
             transcribed_text = await self.transcribe_audio(audio_url)
             
             if not transcribed_text:
-                self.logger.warning("No transcription obtained from audio", audio_url=audio_url)
+                logger.warning("No transcription obtained from audio", audio_url=audio_url)
                 return None
             
-            self.logger.info("Audio transcribed", 
+            logger.info("Audio transcribed", 
                            audio_url=audio_url, 
                            transcription=transcribed_text)
             
@@ -228,31 +231,31 @@ Process any order message following this exact format with no additional comment
             return order_details
 
         except Exception as e:
-            self.logger.error("Error in audio order extraction", 
+            logger.error("Error in audio order extraction", 
                             error=str(e),
                             audio_url=audio_url)
             raise OpenAIError("Error in audio order extraction", details={"error": str(e)})
 
     async def extract_text_with_ocr(self, pdf_data: bytes) -> str:
-        self.logger.info("Starting OCR extraction for PDF", size=len(pdf_data))
+        logger.info("Starting OCR extraction for PDF", size=len(pdf_data))
         images = convert_from_bytes(pdf_data)
         extracted_text = ""
         for idx, img in enumerate(images):
-            self.logger.info("Running OCR on page", page=idx+1)
+            logger.info("Running OCR on page", page=idx+1)
             try:
                 text = pytesseract.image_to_string(img)
-                self.logger.info("OCR result for page", page=idx+1, text_length=len(text))
+                logger.info("OCR result for page", page=idx+1, text_length=len(text))
                 extracted_text += text + "\n"
             except Exception as ocr_error:
-                self.logger.error("OCR failed on page", page=idx+1, error=str(ocr_error))
-        self.logger.info("Completed OCR extraction for PDF", total_text_length=len(extracted_text))
+                logger.error("OCR failed on page", page=idx+1, error=str(ocr_error))
+        logger.info("Completed OCR extraction for PDF", total_text_length=len(extracted_text))
         return extracted_text
 
     async def extract_order_from_pdf(self, pdf_url: str) -> Optional[OrderDetails]:
-        self.logger.info("Starting PDF extraction", pdf_url=pdf_url)
+        logger.info("Starting PDF extraction", pdf_url=pdf_url)
         # Check for pdftoppm binary required by pdf2image
         if not shutil.which("pdftoppm"):
-            self.logger.error("pdftoppm (poppler-utils) not found in PATH. PDF to image conversion will fail.")
+            logger.error("pdftoppm (poppler-utils) not found in PATH. PDF to image conversion will fail.")
             return {
                 "message": "PDF processing is not available because pdftoppm (poppler-utils) is missing on the server. Please contact support.",
                 "pdf_url": pdf_url,
@@ -263,23 +266,23 @@ Process any order message following this exact format with no additional comment
             auth_token = os.getenv("TWILIO_AUTH_TOKEN")
             
             if not account_sid or not auth_token:
-                self.logger.error("Twilio credentials missing for PDF extraction")
+                logger.error("Twilio credentials missing for PDF extraction")
                 raise OpenAIError("Twilio credentials not found in environment variables")
 
             auth = aiohttp.BasicAuth(account_sid, auth_token)
             async with aiohttp.ClientSession() as session:
                 async with session.get(pdf_url, auth=auth) as response:
                     if response.status != 200:
-                        self.logger.error("Failed to download PDF", 
+                        logger.error("Failed to download PDF", 
                                         status=response.status,
                                         url=pdf_url)
                         raise OpenAIError(f"Failed to download PDF: {response.status}")
                     pdf_data = await response.read()
-            self.logger.info("PDF downloaded", size=len(pdf_data))
+            logger.info("PDF downloaded", size=len(pdf_data))
 
             # Use LangChain's PyPDFLoader for better text extraction
             try:
-                self.logger.info("Attempting LangChain text extraction")
+                logger.info("Attempting LangChain text extraction")
                 # Create a temporary file to save the PDF
                 with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
                     temp_file.write(pdf_data)
@@ -298,15 +301,15 @@ Process any order message following this exact format with no additional comment
                 # Clean up temporary file
                 os.unlink(temp_file_path)
                 
-                self.logger.info("LangChain extraction done", text_length=len(extracted_text), pages=len(documents))
+                logger.info("LangChain extraction done", text_length=len(extracted_text), pages=len(documents))
                 
                 # OCR fallback if no text extracted
                 if not extracted_text.strip():
-                    self.logger.warning("No text extracted from PDF, attempting OCR", pdf_url=pdf_url)
+                    logger.warning("No text extracted from PDF, attempting OCR", pdf_url=pdf_url)
                     extracted_text = await self.extract_text_with_ocr(pdf_data)
-                    self.logger.info("OCR extraction done", text_length=len(extracted_text))
+                    logger.info("OCR extraction done", text_length=len(extracted_text))
                     if not extracted_text.strip():
-                        self.logger.error("No text extracted from PDF, even with OCR", pdf_url=pdf_url)
+                        logger.error("No text extracted from PDF, even with OCR", pdf_url=pdf_url)
                         return {
                             "message": "The PDF appears to be empty or contains no extractable text, even with OCR. Please send your order as text or image.",
                             "pdf_url": pdf_url,
@@ -314,16 +317,16 @@ Process any order message following this exact format with no additional comment
                         }
                 
                 # Process the extracted text with the existing order extraction method
-                self.logger.info("Sending extracted text to OpenAI for order extraction", text_length=len(extracted_text))
+                logger.info("Sending extracted text to OpenAI for order extraction", text_length=len(extracted_text))
                 order_details = await self.extract_order_details(extracted_text)
                 
                 if order_details:
-                    self.logger.info("Order details extracted from PDF text", 
+                    logger.info("Order details extracted from PDF text", 
                                    pdf_url=pdf_url,
                                    order_details=order_details)
                     return order_details
                 else:
-                    self.logger.warning("No order details found in extracted text", pdf_url=pdf_url)
+                    logger.warning("No order details found in extracted text", pdf_url=pdf_url)
                     return {
                         "message": "I couldn't detect any order details in the PDF content. Please ensure the PDF contains clear order information or send your order as text.",
                         "pdf_url": pdf_url,
@@ -332,7 +335,7 @@ Process any order message following this exact format with no additional comment
                     }
                     
             except Exception as pdf_error:
-                self.logger.error("Error extracting text from PDF using LangChain", 
+                logger.error("Error extracting text from PDF using LangChain", 
                                 error=str(pdf_error),
                                 pdf_url=pdf_url)
                 return {
@@ -342,7 +345,7 @@ Process any order message following this exact format with no additional comment
                 }
 
         except Exception as e:
-            self.logger.error("Error in PDF order extraction", 
+            logger.error("Error in PDF order extraction", 
                             error=str(e),
                             pdf_url=pdf_url)
             raise OpenAIError("Error in PDF order extraction", details={"error": str(e)})
