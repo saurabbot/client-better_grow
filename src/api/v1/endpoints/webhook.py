@@ -16,6 +16,14 @@ logger = structlog.get_logger(__name__)
 def get_container() -> Container:
     return Container()
 
+def format_order_confirmation(order_details: str) -> str:
+    if not order_details:
+        return "✅ Order received: No order details found."
+    formatted_order = order_details.strip()
+    confirmation = f"✅ Order received:\n{formatted_order}"
+    
+    return confirmation
+
 @router.post("/webhook")
 async def webhook(
     request: WebhookRequest,
@@ -99,7 +107,7 @@ async def twilio_webhook(
                 # logger.info("Fetched previous messages", count=len(all_previous_messages))
                 order_json = await container.openai_service.extract_order_details(text_message)
                 logger.info("Order details extracted from text", order_json=order_json)
-                confirmation_message = f"✅ Order received:\n{order_json}"
+                confirmation_message = format_order_confirmation(order_json)
                 container.twillio_service.send_message(confirmation_message, to=From)
             except Exception as e:
                 logger.error("failed_to_process_text_order", error=str(e))
@@ -128,7 +136,7 @@ async def twilio_webhook(
                 order_details = await container.openai_service.extract_order_from_image(image_url)
                 if order_details:
                     logger.info("Order details extracted from image", order_details=order_details)
-                    confirmation_message = f"✅ Order received: {order_details}"
+                    confirmation_message = format_order_confirmation(order_details)
                     container.twillio_service.send_message(confirmation_message, to=From)
                 else:
                     logger.warning("No order details found in image", image_url=image_url)
@@ -169,7 +177,7 @@ async def twilio_webhook(
                     #     session.session_id,
                     #     SessionUpdate(order_details=order_details)
                     # )
-                    confirmation_message = f"✅ Order received: {order_details}"
+                    confirmation_message = format_order_confirmation(order_details)
                     container.twillio_service.send_message(confirmation_message, to=From)
                     # container.session_service.add_message(
                     #     phone_number=From,
@@ -212,7 +220,7 @@ async def twilio_webhook(
                 # )
                 order_details = await container.openai_service.extract_order_from_pdf(pdf_url)
                 logger.info("Order details extracted from PDF", order_details=order_details)
-                confirmation_message = f"✅ Order received: {order_details}"
+                confirmation_message = format_order_confirmation(order_details)
                 container.twillio_service.send_message(confirmation_message, to=From)
             except Exception as e:
                 logger.error("failed_to_process_pdf_order", error=str(e))
