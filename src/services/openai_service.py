@@ -71,11 +71,23 @@ Process any order message following this exact format with no additional comment
                         "content": text
                     }
                 ],
-                max_tokens=300
+                max_tokens=1000,
+                temperature=0.1
             )
 
             extracted_data = response.choices[0].message.content.strip()
-            logger.info("Order extraction completed successfully", extracted_data=extracted_data)
+            logger.info("Order extraction completed successfully", 
+                       extracted_data=extracted_data, 
+                       response_length=len(extracted_data),
+                       finish_reason=response.choices[0].finish_reason)
+            
+            # Check if response was truncated
+            if response.choices[0].finish_reason == "length":
+                logger.warning("Response was truncated due to token limit", 
+                             extracted_data=extracted_data,
+                             max_tokens=1000)
+                # You could implement a retry with higher token limit here if needed
+            
             return extracted_data
         except Exception as e:
             logger.error("Error in OpenAI API call", error=str(e), error_type=type(e).__name__)
@@ -160,10 +172,22 @@ Process any order message following this exact format with no additional comment
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                max_tokens=300
+                max_tokens=1000,
+                temperature=0.1
             )
 
             extracted_data = response.choices[0].message.content.strip()
+            logger.info("Image order extraction completed", 
+                       extracted_data=extracted_data,
+                       response_length=len(extracted_data),
+                       finish_reason=response.choices[0].finish_reason)
+            
+            # Check if response was truncated
+            if response.choices[0].finish_reason == "length":
+                logger.warning("Image response was truncated due to token limit", 
+                             extracted_data=extracted_data,
+                             max_tokens=1000)
+            
             print("Raw OpenAI content:", extracted_data)
             return extracted_data
 
@@ -172,6 +196,7 @@ Process any order message following this exact format with no additional comment
                             error=str(e),
                             image_url=image_url)
             raise OpenAIError("Error in OpenAI API call", details={"error": str(e)})
+
     async def transcribe_audio(self, audio_url: str) -> Optional[str]:
         try:
             account_sid = os.getenv("TWILIO_ACCOUNT_SID")
